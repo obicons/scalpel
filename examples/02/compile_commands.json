@@ -1,0 +1,17 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-Wall",
+      "-Wextra",
+      "-std=c++2b",
+      "-c",
+      "-o",
+      "test.o",
+      "test.cc"
+    ],
+    "directory": "/Users/taylor.2751/src/rust/scalpel/examples/02",
+    "file": "/Users/taylor.2751/src/rust/scalpel/examples/02/test.cc",
+    "output": "/Users/taylor.2751/src/rust/scalpel/examples/02/test.o"
+  }
+]
