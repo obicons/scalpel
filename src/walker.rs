@@ -7,6 +7,7 @@ pub struct WalkResult {
     context: Vec<String>,
     pub constraints: Vec<Rc<constraints::Constraint>>,
     object_name: Option<String>,
+    fresh_count: i32,
 }
 
 pub fn extract_types(tu: &clang::TranslationUnit) -> WalkResult {
@@ -23,6 +24,12 @@ impl WalkResult {
         } else {
             String::from(name)
         }
+    }
+
+    fn fresh_variable(&mut self) -> String {
+        let varname = "T".to_owned() + &self.fresh_count.to_string();
+        self.fresh_count += 1;
+        return varname;
     }
 
     fn analyze_entity(
@@ -83,9 +90,10 @@ impl WalkResult {
                                     unwrap_or(format!("Unknown object in {}", spell_source_location(&node)));
 
                 let lobj = Rc::new(constraints::Object::new(&lhs_object));
+                let repair_constant = Rc::new(constraints::Object::new(&self.fresh_variable()));
                 let robj = Rc::new(constraints::Object::new(&self.object_name.as_ref().unwrap()));
-                let constraint = constraints::assert_equal(lobj, robj);
-                //println!("Constraint: {}", constraint);
+
+                let constraint = constraints::assert_repairable(lobj, robj, repair_constant);
                 self.constraints.push(constraint);
 
                 return clang::EntityVisitResult::Continue;
@@ -114,6 +122,7 @@ impl WalkResult {
             context: vec![],
             constraints: vec![],
             object_name: None,
+            fresh_count: 0,
         }
     }
 }

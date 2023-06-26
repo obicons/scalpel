@@ -15,15 +15,18 @@ struct Cli {
     // The path to the directory containing compile_commands.json.
     #[arg(short, long)]
     compile_commands_directory: String,
+
+    // Whether to output the CSV of the system of linear equations.
+    #[arg(short, long)]
+    show_equations: bool,
 }
 
 fn main() {
-    let args = Cli::parse();
-    println!("Compile commands directory: {}", args.compile_commands_directory);
+    let cli_args = Cli::parse();
 
-    validate_command_line_args(&args);
+    validate_command_line_args(&cli_args);
 
-    let db_result = clang::CompilationDatabase::from_directory(args.compile_commands_directory);
+    let db_result = clang::CompilationDatabase::from_directory(cli_args.compile_commands_directory);
     if let Err(_) = db_result {
         std::process::exit(1);
     }
@@ -73,7 +76,7 @@ fn main() {
         // println!("====");
         // println!("{:?}", walk_result.constraints[1]);
         // constraint_system_to_linear_system(&vec![walk_result.constraints[1].clone()]);
-        let system = constraint_system_to_linear_system(&walk_result.constraints);
+        let system = constraint_system_to_linear_system(&walk_result.constraints, cli_args.show_equations);
 
         let mut a = Vec::<Vec<f64>>::new();
         for row in &system {
@@ -90,10 +93,10 @@ fn main() {
         let b = DVector::from_iterator(b.len(), b);
         let results = lstsq::lstsq(&a, &b, 0.000000001).unwrap();
 
-        if results.residuals.abs() > 1. {
-            println!("Typechecking error.");
+        if results.residuals.abs() > 0.01 {
+            println!("Not repairable.");
         } else {
-            println!("Typechecking succeeded.");
+            println!("Repairable.");
         }
     }
 }

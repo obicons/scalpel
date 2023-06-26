@@ -80,6 +80,41 @@ pub fn assert_equal(obj1: Rc<Object>, obj2: Rc<Object>) -> Rc<Constraint> {
     )
 }
 
+// Asserts that rhs can be repaired into lhs.
+pub fn assert_repairable(lhs: Rc<Object>, rhs: Rc<Object>, repair_term: Rc<Object>) -> Rc<Constraint> {
+    let mut eqs: Vec<Rc<Equation>> = vec![
+        Rc::new(Equation {
+                    term: Rc::new(Term::Sub(
+                        Rc::new(Term::Object(lhs.clone(), Selector::ScalarPrefix)),
+                        Rc::new(Term::Add(
+                            Rc::new(Term::Object(rhs.clone(), Selector::ScalarPrefix)),
+                            Rc::new(Term::Object(repair_term.clone(), Selector::ScalarPrefix)),
+                        )),
+                    )),
+                    value: 0.0,
+                })
+    ];
+    for dimension in 0..types::NUM_BASE_UNITS {
+        eqs.push(Rc::new(Equation{
+            term: Rc::new(Term::Sub(
+                Rc::new(Term::Object(lhs.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
+                Rc::new(Term::Object(rhs.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
+            )),
+            value: 0.0,
+        }));
+    }
+
+    let and1 = Rc::new(Constraint::And(
+        Rc::new(Constraint::Equation(eqs[0].clone())),
+        Rc::new(Constraint::Equation(eqs[1].clone())),
+    ));
+    eqs.split_off(2).into_iter().fold(
+        and1,
+        |constraint, eq|
+            Rc::new(Constraint::And(constraint, Rc::new(Constraint::Equation(eq))))
+    )
+}
+
 #[derive(Clone, Debug)]
 pub struct Equation {
     term: Rc<Term>,
@@ -245,7 +280,7 @@ fn add_constraint_to_system(constraint: &Constraint,
     }
 }
 
-pub fn constraint_system_to_linear_system(constraints: &Vec<Rc<Constraint>>) -> Vec<Vec<f64>> {
+pub fn constraint_system_to_linear_system(constraints: &Vec<Rc<Constraint>>, output_csv: bool) -> Vec<Vec<f64>> {
     // Step 1: Map each object appearing in a constraint to a unique column number.
     let object_name_to_column = constraint_objects_to_column_numbers(constraints);
 
@@ -264,30 +299,31 @@ pub fn constraint_system_to_linear_system(constraints: &Vec<Rc<Constraint>>) -> 
                                  &mut system);
     }
 
-    // TEMPORARY: Print the linear system header.
-    let mut header: HashMap<i32, String> = HashMap::new();
-    for (object, column) in object_name_to_column {
-        header.insert(column, object.label);
-    }
-
-    let mut sep = "";
-    for i in 0..header.len() {
-        print!("{}{}.sm", sep, header.get(&(i as i32)).unwrap());
-        sep = ",";
-
-        for j in 0..NUM_BASE_UNITS {
-            print!("{}{}.{:?}", sep, header.get(&(i as i32)).unwrap(), SIBaseUnits::from(j));
+    if output_csv {
+        let mut header: HashMap<i32, String> = HashMap::new();
+        for (object, column) in object_name_to_column {
+            header.insert(column, object.label);
         }
-    }
-    println!("{}equals", sep);
 
-    for row in &system {
         let mut sep = "";
-        for val in row {
-            print!("{}{}", sep, val);
+        for i in 0..header.len() {
+            print!("{}{}.sm", sep, header.get(&(i as i32)).unwrap());
             sep = ",";
+
+            for j in 0..NUM_BASE_UNITS {
+                print!("{}{}.{:?}", sep, header.get(&(i as i32)).unwrap(), SIBaseUnits::from(j));
+            }
         }
-        println!();
+        println!("{}equals", sep);
+
+        for row in &system {
+            let mut sep = "";
+            for val in row {
+                print!("{}{}", sep, val);
+                sep = ",";
+            }
+            println!();
+        }
     }
 
     return system;
