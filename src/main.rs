@@ -75,10 +75,10 @@ fn main() {
         // constraint_system_to_linear_system(&vec![walk_result.constraints[1].clone()]);
         let system = constraint_system_to_linear_system(&walk_result.constraints);
 
-        let mut A = Vec::<Vec<f64>>::new();
+        let mut a = Vec::<Vec<f64>>::new();
         for row in &system {
             let v = &row[0..row.len() - 1].to_vec();
-            A.push(v.clone());
+            a.push(v.clone());
         }
 
         let mut b = Vec::<f64>::new();
@@ -86,9 +86,9 @@ fn main() {
             b.push(*row.last().unwrap());
         }
 
-        let A = DMatrix::from_fn(A.len(), A[0].len(), |i, j| A[i][j]);
+        let a = DMatrix::from_fn(a.len(), a[0].len(), |i, j| a[i][j]);
         let b = DVector::from_iterator(b.len(), b);
-        let results = lstsq::lstsq(&A, &b, 0.000000001).unwrap();
+        let results = lstsq::lstsq(&a, &b, 0.000000001).unwrap();
 
         if results.residuals.abs() > 1. {
             println!("Typechecking error.");
