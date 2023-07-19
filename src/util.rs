@@ -91,3 +91,7 @@ pub fn spell_source_location(entity: &clang::Entity) -> String {
                 Some(format!("file {} on line {} column {}", file, line, col))
             }).unwrap_or(String::from("Unknown location"))
 }
+
+pub fn get_rhs<'a>(entity: &'a clang::Entity) -> Option<clang::Entity<'a>> {
+    entity.get_child(0)
+}

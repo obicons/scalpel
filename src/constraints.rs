@@ -1,6 +1,8 @@
 use std::{rc::Rc, collections::HashMap};
 use crate::types::{self, NUM_BASE_UNITS, SIBaseUnits};
 
+pub const COLUMNS_PER_OBJECT: usize = 1 + NUM_BASE_UNITS;
+
 #[derive(Debug)]
 pub enum Constraint {
     // Both of the constraints must be true.
@@ -159,7 +161,7 @@ impl std::fmt::Display for Term {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Object {
     // A human-readable description of the object.
-    label: String,
+    pub label: String,
 }
 
 impl std::fmt::Display for Object {
@@ -223,26 +225,25 @@ fn constraint_objects_to_column_numbers(constraints: &Vec<Rc<Constraint>>) -> Ha
 }
 
 fn add_term_to_row(term: &Rc<Term>,
-                   columns_per_object: usize,
                    object_to_column_offset: &HashMap<Object, i32>,
                    row: &mut Vec<f64>) {
     match &**term {
         Term::Add(t1, t2) => {
-            add_term_to_row(t1, columns_per_object, object_to_column_offset, row);
-            add_term_to_row(t2, columns_per_object, object_to_column_offset, row);
+            add_term_to_row(t1, object_to_column_offset, row);
+            add_term_to_row(t2, object_to_column_offset, row);
         },
         Term::Sub(t1, t2) => {
-            add_term_to_row(t1, columns_per_object, object_to_column_offset, row);
+            add_term_to_row(t1, object_to_column_offset, row);
 
             let mut tmp = vec![0.0; row.len()];
-            add_term_to_row(t2, columns_per_object, object_to_column_offset, &mut tmp);
+            add_term_to_row(t2, object_to_column_offset, &mut tmp);
 
             for i in 0..tmp.len() {
                 row[i] -= tmp[i];
             }
         },
         Term::Object(object, selector) => {
-            let idx = (*object_to_column_offset.get(object).unwrap() as usize) * columns_per_object;
+            let idx = (*object_to_column_offset.get(object).unwrap() as usize) * COLUMNS_PER_OBJECT;
             match selector {
                 Selector::BaseUnit(bu) => {
                     let offset: usize = bu.into_usize() + 1;
@@ -257,52 +258,46 @@ fn add_term_to_row(term: &Rc<Term>,
 }
 
 fn add_constraint_to_system(constraint: &Constraint,
-                            columns_per_object: usize,
                             object_to_column_offset: &HashMap<Object, i32>,
                             system: &mut Vec<Vec<f64>>) {
     match constraint {
         Constraint::And(c1, c2) => {
-            add_constraint_to_system(c1, columns_per_object, object_to_column_offset, system);
-            add_constraint_to_system(c2, columns_per_object, object_to_column_offset, system);
+            add_constraint_to_system(c1, object_to_column_offset, system);
+            add_constraint_to_system(c2, object_to_column_offset, system);
         },
         Constraint::Equation(eq) => {
             let mut eq_row = Vec::<f64>::new();
-            let total_columns = columns_per_object * object_to_column_offset.keys().len() + 1;
+            let total_columns = COLUMNS_PER_OBJECT * object_to_column_offset.keys().len() + 1;
             for _ in 0..total_columns {
                 eq_row.push(0.0);
             }
 
             let last_idx = eq_row.len() - 1;
             eq_row[last_idx] = eq.value;
-            add_term_to_row(&eq.term, columns_per_object, object_to_column_offset, &mut eq_row);
+            add_term_to_row(&eq.term, object_to_column_offset, &mut eq_row);
             system.push(eq_row);
         },
     }
 }
 
-pub fn constraint_system_to_linear_system(constraints: &Vec<Rc<Constraint>>, output_csv: bool) -> Vec<Vec<f64>> {
+pub fn constraint_system_to_linear_system(constraints: &Vec<Rc<Constraint>>, output_csv: bool) -> (Vec<Vec<f64>>, HashMap<Object, i32>) {
     // Step 1: Map each object appearing in a constraint to a unique column number.
     let object_name_to_column = constraint_objects_to_column_numbers(constraints);
 
     // Step 2: Build the result vector.
 
-    // There is 1 column for scalar multiple, and NUM_BASE_UNITS columns for
-    // each of the base units.
-    let columns_per_object = 1 + NUM_BASE_UNITS;
-
     // Each row has columns_per_object columns.
     let mut system = Vec::<Vec<f64>>::new();
     for constraint in constraints {
         add_constraint_to_system(constraint,
-                                 columns_per_object,
                                  &object_name_to_column,
                                  &mut system);
     }
 
     if output_csv {
         let mut header: HashMap<i32, String> = HashMap::new();
-        for (object, column) in object_name_to_column {
-            header.insert(column, object.label);
+        for (object, column) in &object_name_to_column {
+            header.insert(*column, object.label.clone());
         }
 
         let mut sep = "";
@@ -326,5 +321,5 @@ pub fn constraint_system_to_linear_system(constraints: &Vec<Rc<Constraint>>, out
         }
     }
 
-    return system;
+    return (system, object_name_to_column);
 }

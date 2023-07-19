@@ -1,13 +1,19 @@
 use crate::util::*;
 use crate::{constraints, types};
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::rc::Rc;
+
+pub struct RepairContext {
+    pub source_location: String,
+    pub original_expression: String,
+}
 
 pub struct WalkResult {
     context: Vec<String>,
     pub constraints: Vec<Rc<constraints::Constraint>>,
     object_name: Option<String>,
     fresh_count: i32,
+    pub tmp_terms_to_repair_contexts: HashMap<constraints::Object, RepairContext>,
 }
 
 pub fn extract_types(tu: &clang::TranslationUnit) -> WalkResult {
@@ -90,8 +96,22 @@ impl WalkResult {
                                     unwrap_or(format!("Unknown object in {}", spell_source_location(&node)));
 
                 let lobj = Rc::new(constraints::Object::new(&lhs_object));
-                let repair_constant = Rc::new(constraints::Object::new(&self.fresh_variable()));
+                let repair_term = self.fresh_variable();
+                let repair_constant = Rc::new(constraints::Object::new(&repair_term));
                 let robj = Rc::new(constraints::Object::new(&self.object_name.as_ref().unwrap()));
+
+                let original_expression =
+                    get_rhs(&node)
+                        .and_then(|entity| get_entity_spelling(&entity))
+                        .unwrap_or(String::from("Unknown spelling"));
+                let source_location = spell_source_location(&node);
+                self.tmp_terms_to_repair_contexts.insert(
+                    constraints::Object::new(&repair_term),
+                    RepairContext{
+                        source_location,
+                        original_expression,
+                    }
+                );
 
                 let constraint = constraints::assert_repairable(lobj, robj, repair_constant);
                 self.constraints.push(constraint);
@@ -123,6 +143,7 @@ impl WalkResult {
             constraints: vec![],
             object_name: None,
             fresh_count: 0,
+            tmp_terms_to_repair_contexts: HashMap::new(),
         }
     }
 }
