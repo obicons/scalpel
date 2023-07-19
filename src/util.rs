@@ -95,3 +95,34 @@ pub fn spell_source_location(entity: &clang::Entity) -> String {
 pub fn get_rhs<'a>(entity: &'a clang::Entity) -> Option<clang::Entity<'a>> {
     entity.get_child(0)
 }
+
+pub fn get_binary_operator(entity: &clang::Entity) -> Option<String> {
+    let left_offset =
+        entity
+            .get_child(0)
+            .iter()
+            .map(|child| child.get_range().and_then(|r| Some(r.tokenize().len())))
+            .fold(
+                Some(0),
+                |acc, elt| {
+                    match (acc, elt) {
+                        (Some(acc), Some(elt)) => Some(acc + elt),
+                        _ => None,
+                    }
+                },
+            );
+
+    if left_offset.is_none() {
+        return None;
+    }
+
+    let entity_tokens =
+        entity
+            .get_range()
+            .and_then(|r| Some(r.tokenize()));
+    if entity_tokens.is_none() {
+        return None;
+    }
+
+    return Some(entity_tokens.unwrap()[left_offset.unwrap()].get_spelling());
+}

@@ -1,3 +1,5 @@
+use clang::EntityVisitResult;
+
 use crate::util::*;
 use crate::{constraints, types};
 use std::collections::{HashSet, HashMap};
@@ -75,9 +77,9 @@ impl WalkResult {
             node.visit_children(|n, p| self.analyze_entity(n, p));
             return clang::EntityVisitResult::Continue;
         } else {
-            // println!("Visiting node {} of kind {:?}: is_def = {},  is_decl = {}",
-            //          get_entity_spelling(&node).unwrap_or(String::from("Unknown spelling")),
-            //          node.get_kind(), node.is_definition(), node.is_declaration());
+            println!("Visiting node {} of kind {:?}: is_def = {},  is_decl = {}",
+                     get_entity_spelling(&node).unwrap_or(String::from("Unknown spelling")),
+                     node.get_kind(), node.is_definition(), node.is_declaration());
 
             // Create constraints based on the RHS.
             if node.is_definition() && has_initialization(&node) {
@@ -121,7 +123,7 @@ impl WalkResult {
                 self.object_name = Some(
                     self.qualify_name(&node.get_name()
                                         .unwrap_or(String::from("Unknown object"))));
-                return clang::EntityVisitResult::Break;
+                return clang::EntityVisitResult::Continue;
             } else if node.get_kind() == clang::EntityKind::FloatingLiteral {
                 if let Some(clang::EvaluationResult::Float(f)) = node.evaluate() {
                     let object_name = format!("literal {} at {}", f, spell_source_location(&node));
@@ -131,6 +133,55 @@ impl WalkResult {
                     self.object_name = None;
                 }
                 return clang::EntityVisitResult::Break;
+            } else if node.get_kind() == clang::EntityKind::BinaryOperator {
+                println!("binop: lhs = {}, rhs = {}", get_entity_spelling(&node.get_child(0).unwrap()).unwrap_or(String::from("unknown")), get_entity_spelling(&node.get_child(1).unwrap()).unwrap_or(String::from("unknown")));
+                let mut first_parent: Option<clang::Entity> = None;
+                let mut lhs_object: Option<String> = None;
+                node.visit_children(|n, p| {
+                    println!("Calling: {:?}", get_entity_spelling(&n));
+                    if let None = first_parent {
+                        first_parent = Some(p);
+                    } else if Some(p) == first_parent && lhs_object.is_none() {
+                        // We have the LHS object.
+                        // Keep going to find the RHS.
+                        lhs_object = self.object_name.clone();
+                    }
+
+                    return self.analyze_entity(n, p);
+                });
+
+                if lhs_object.is_none() {
+                    return clang::EntityVisitResult::Continue;
+                }
+                let lhs_object = lhs_object.unwrap();
+
+                let operator = get_binary_operator(&node);
+                if operator.is_none() {
+                    return clang::EntityVisitResult::Continue;
+                }
+
+                let operator = operator.unwrap();
+                if operator == "=" {
+                    let lobj = Rc::new(constraints::Object::new(&lhs_object));
+                    let repair_term = self.fresh_variable();
+                    let repair_constant = Rc::new(constraints::Object::new(&repair_term));
+                    let robj = Rc::new(constraints::Object::new(&self.object_name.as_ref().unwrap()));
+                    let original_expression =
+                    node.get_child(1)
+                        .and_then(|entity| get_entity_spelling(&entity))
+                        .unwrap_or(String::from("Unknown spelling"));
+                    let source_location = spell_source_location(&node.get_child(1).unwrap());
+                    self.tmp_terms_to_repair_contexts.insert(
+                        constraints::Object::new(&repair_term),
+                        RepairContext{
+                            source_location,
+                            original_expression,
+                        }
+                    );
+
+                    let constraint = constraints::assert_repairable(lobj, robj, repair_constant);
+                    self.constraints.push(constraint);
+                }
             }
 
             return clang::EntityVisitResult::Recurse
