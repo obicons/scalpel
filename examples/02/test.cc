@@ -1,3 +1,5 @@
+// MP compression
+// Linear programming optimizations (e.g., point-wise).
 int main() {
     /// x: m
     int x;

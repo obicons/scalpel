@@ -161,7 +161,7 @@ impl WalkResult {
                 }
 
                 let operator = operator.unwrap();
-                if operator == "=" {
+                if operator == "=" || operator == "+" || operator == "-" {
                     let lobj = Rc::new(constraints::Object::new(&lhs_object));
                     let repair_term = self.fresh_variable();
                     let repair_constant = Rc::new(constraints::Object::new(&repair_term));
@@ -181,6 +181,7 @@ impl WalkResult {
 
                     let constraint = constraints::assert_repairable(lobj, robj, repair_constant);
                     self.constraints.push(constraint);
+                    return clang::EntityVisitResult::Continue;
                 }
             }
 
