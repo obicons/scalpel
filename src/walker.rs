@@ -167,7 +167,7 @@ impl WalkResult {
                     let repair_term = self.fresh_variable();
                     let repair_constant = Rc::new(constraints::Object::new(&repair_term));
                     let robj = Rc::new(constraints::Object::new(&self.object_name.as_ref().unwrap()));
-                    //println!("LHS: {}, RHS: {}", lhs_object, self.object_name.as_ref().unwrap());
+
                     let original_expression =
                     node.get_child(1)
                         .and_then(|entity| get_entity_spelling(&entity))
@@ -184,10 +184,7 @@ impl WalkResult {
                     let constraint = constraints::assert_repairable(lobj, robj, repair_constant);
                     self.constraints.push(constraint);
 
-                    // let expr_name = self.fresh_variable();
-                    // let expr_constant = Rc::new(constraints::Object::new(&expr_name));
-
-                    self.object_name = Some(repair_term);
+                    self.object_name = Some(lhs_object);
                     return clang::EntityVisitResult::Continue;
                 } else if operator == "*" {
                     let lobj = Rc::new(constraints::Object::new(&lhs_object));

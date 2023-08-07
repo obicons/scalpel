@@ -5,8 +5,7 @@ int main() {
     /// y: cm
     int y;
 
-    int z;
-    x + y - x;
+    int z = x + y - x;
 
    // z = y - x;
 }

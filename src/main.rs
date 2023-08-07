@@ -178,7 +178,7 @@ fn generate_repair(x: Lstsq<f64, nalgebra::Dyn>, object_to_column: &HashMap<cons
                 let real_column = constraints::COLUMNS_PER_OBJECT * (*column as usize);
                 //println!("{} in {} at {} -> {}", obj.label, context.original_expression, context.source_location, solution[real_column]);
                 if  solution[real_column].abs() > 0.00000001 {
-                    println!("{}: (pow(10.0, {:.3}) * ({})) ({})", context.source_location, solution[real_column] * -1.0, context.original_expression, obj.label);
+                    println!("{}: (pow(10.0, {:.3}) * ({}))", context.source_location, solution[real_column] * -1.0, context.original_expression);
                 }
             },
             None => eprintln!("WARNING: Unable to find column for constant {}", obj.label)
