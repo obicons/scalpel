@@ -101,13 +101,17 @@ fn main() {
             walk_result.tmp_terms_to_repair_contexts.keys()
                 .map(|o| o.clone())
                 .collect();
-        do_sparsest_repair(
+        let result = do_sparsest_repair(
             &a,
             &b,
             &object_name_to_colums,
             &walk_result.tmp_terms_to_repair_contexts,
             &mut tmp_terms,
         );
+
+        if !result {
+            eprintln!("Program not repairable.")
+        }
 
         // let a = DMatrix::from_fn(a.len(), a[0].len(), |i, j| a[i][j]);
         // let b = DVector::from_iterator(b.len(), b);
@@ -174,7 +178,7 @@ fn generate_repair(x: Lstsq<f64, nalgebra::Dyn>, object_to_column: &HashMap<cons
                 let real_column = constraints::COLUMNS_PER_OBJECT * (*column as usize);
                 //println!("{} in {} at {} -> {}", obj.label, context.original_expression, context.source_location, solution[real_column]);
                 if  solution[real_column].abs() > 0.00000001 {
-                    println!("{}: (pow(10.0, {:.3}) * {})", context.source_location, solution[real_column] * -1.0, context.original_expression);
+                    println!("{}: (pow(10.0, {:.3}) * ({})) ({})", context.source_location, solution[real_column] * -1.0, context.original_expression, obj.label);
                 }
             },
             None => eprintln!("WARNING: Unable to find column for constant {}", obj.label)

@@ -161,11 +161,13 @@ impl WalkResult {
                 }
 
                 let operator = operator.unwrap();
-                if operator == "=" || operator == "+" || operator == "-" {
+                if operator == "=" || operator == "+" || operator == "-" || operator == "<" ||
+                   operator == "<=" || operator == ">" || operator == ">=" {
                     let lobj = Rc::new(constraints::Object::new(&lhs_object));
                     let repair_term = self.fresh_variable();
                     let repair_constant = Rc::new(constraints::Object::new(&repair_term));
                     let robj = Rc::new(constraints::Object::new(&self.object_name.as_ref().unwrap()));
+                    //println!("LHS: {}, RHS: {}", lhs_object, self.object_name.as_ref().unwrap());
                     let original_expression =
                     node.get_child(1)
                         .and_then(|entity| get_entity_spelling(&entity))
@@ -181,6 +183,29 @@ impl WalkResult {
 
                     let constraint = constraints::assert_repairable(lobj, robj, repair_constant);
                     self.constraints.push(constraint);
+
+                    // let expr_name = self.fresh_variable();
+                    // let expr_constant = Rc::new(constraints::Object::new(&expr_name));
+
+                    self.object_name = Some(repair_term);
+                    return clang::EntityVisitResult::Continue;
+                } else if operator == "*" {
+                    let lobj = Rc::new(constraints::Object::new(&lhs_object));
+                    let type_term = self.fresh_variable();
+                    let type_constant = Rc::new(constraints::Object::new(&type_term));
+                    let robj = Rc::new(constraints::Object::new(&self.object_name.as_ref().unwrap()));
+                    let constraint = constraints::create_multiplicative_type(type_constant, lobj, robj);
+                    self.constraints.push(constraint);
+                    self.object_name = Some(type_term);
+                    return clang::EntityVisitResult::Continue;
+                } else if operator == "/" {
+                    let lobj = Rc::new(constraints::Object::new(&lhs_object));
+                    let type_term = self.fresh_variable();
+                    let type_constant = Rc::new(constraints::Object::new(&type_term));
+                    let robj = Rc::new(constraints::Object::new(&self.object_name.as_ref().unwrap()));
+                    let constraint = constraints::create_division_type(type_constant, lobj, robj);
+                    self.constraints.push(constraint);
+                    self.object_name = Some(type_term);
                     return clang::EntityVisitResult::Continue;
                 }
             }

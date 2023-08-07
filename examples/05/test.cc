@@ -6,7 +6,7 @@ int main() {
     int y;
 
     int z;
-    z = y + x;
+    x + y - x;
 
-    z = y - x;
+   // z = y - x;
 }

@@ -117,6 +117,82 @@ pub fn assert_repairable(lhs: Rc<Object>, rhs: Rc<Object>, repair_term: Rc<Objec
     )
 }
 
+// Creates a new type by multiplying lhs and rhs.
+pub fn create_multiplicative_type(result_type: Rc<Object>, lhs: Rc<Object>, rhs: Rc<Object>) -> Rc<Constraint> {
+    let mut eqs: Vec<Rc<Equation>> = vec![
+        Rc::new(Equation {
+                    term: Rc::new(Term::Sub(
+                        Rc::new(Term::Object(result_type.clone(), Selector::ScalarPrefix)),
+                        Rc::new(Term::Add(
+                            Rc::new(Term::Object(lhs.clone(), Selector::ScalarPrefix)),
+                            Rc::new(Term::Object(rhs.clone(), Selector::ScalarPrefix)),
+                        )),
+                    )),
+                    value: 0.0,
+                })
+    ];
+    for dimension in 0..types::NUM_BASE_UNITS {
+        eqs.push(Rc::new(Equation{
+            term: Rc::new(Term::Sub(
+                Rc::new(Term::Object(result_type.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
+                Rc::new(Term::Add(
+                    Rc::new(Term::Object(lhs.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
+                    Rc::new(Term::Object(rhs.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
+                )),
+            )),
+            value: 0.0,
+        }));
+    }
+
+    let and1 = Rc::new(Constraint::And(
+        Rc::new(Constraint::Equation(eqs[0].clone())),
+        Rc::new(Constraint::Equation(eqs[1].clone())),
+    ));
+    eqs.split_off(2).into_iter().fold(
+        and1,
+        |constraint, eq|
+            Rc::new(Constraint::And(constraint, Rc::new(Constraint::Equation(eq))))
+    )
+}
+
+// Creates a new type by dividing lhs and rhs.
+pub fn create_division_type(result_type: Rc<Object>, lhs: Rc<Object>, rhs: Rc<Object>) -> Rc<Constraint> {
+    let mut eqs: Vec<Rc<Equation>> = vec![
+        Rc::new(Equation {
+                    term: Rc::new(Term::Sub(
+                        Rc::new(Term::Object(result_type.clone(), Selector::ScalarPrefix)),
+                        Rc::new(Term::Add(
+                            Rc::new(Term::Object(lhs.clone(), Selector::ScalarPrefix)),
+                            Rc::new(Term::Object(rhs.clone(), Selector::ScalarPrefix)),
+                        )),
+                    )),
+                    value: 0.0,
+                })
+    ];
+    for dimension in 0..types::NUM_BASE_UNITS {
+        eqs.push(Rc::new(Equation{
+            term: Rc::new(Term::Add(
+                Rc::new(Term::Object(result_type.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
+                Rc::new(Term::Sub(
+                    Rc::new(Term::Object(rhs.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
+                    Rc::new(Term::Object(lhs.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
+                )),
+            )),
+            value: 0.0,
+        }));
+    }
+
+    let and1 = Rc::new(Constraint::And(
+        Rc::new(Constraint::Equation(eqs[0].clone())),
+        Rc::new(Constraint::Equation(eqs[1].clone())),
+    ));
+    eqs.split_off(2).into_iter().fold(
+        and1,
+        |constraint, eq|
+            Rc::new(Constraint::And(constraint, Rc::new(Constraint::Equation(eq))))
+    )
+}
+
 #[derive(Clone, Debug)]
 pub struct Equation {
     term: Rc<Term>,

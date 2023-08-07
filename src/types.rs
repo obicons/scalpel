@@ -65,7 +65,11 @@ pub fn parse_type_comment<'a>(text: &'a str) -> Option<(&'a str, Type)> {
 pub fn parse_human_type(text: &str) -> Option<Type> {
     let m: HashMap<&str, Type> = HashMap::from([
         ("m", Type{scalar_prefix: 0.0, si_units: [0, 1, 0, 0, 0, 0, 0]}),
+        ("m^2", Type{scalar_prefix: 0.0, si_units: [0, 2, 0, 0, 0, 0, 0]}),
+        ("m^3", Type{scalar_prefix: 0.0, si_units: [0, 3, 0, 0, 0, 0, 0]}),
         ("cm", Type{scalar_prefix: -2.0, si_units: [0, 1, 0, 0, 0, 0, 0]}),
+        ("cm^2", Type{scalar_prefix: -2.0, si_units: [0, 2, 0, 0, 0, 0, 0]}),
+        ("cm^3", Type{scalar_prefix: -2.0, si_units: [0, 3, 0, 0, 0, 0, 0]}),
         ("s", Type{scalar_prefix: 0.0, si_units: [1, 0, 0, 0, 0, 0, 0]}),
     ]);
 
