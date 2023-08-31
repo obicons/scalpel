@@ -1,15 +1,14 @@
-#![feature(let_chains, variant_count)]
 use std::collections::HashMap;
 
 use clap::Parser;
 use constraints::COLUMNS_PER_OBJECT;
 use lstsq::Lstsq;
-use nalgebra::{DMatrix, DVector, ComplexField};
-
+use nalgebra::{DMatrix, DVector};
 
 use crate::constraints::constraint_system_to_linear_system;
 
 mod constraints;
+mod frames;
 mod types;
 mod util;
 mod walker;
@@ -26,6 +25,8 @@ struct Cli {
 }
 
 fn main() {
+    play_with_z3();
+    std::process::exit(0);
     let cli_args = Cli::parse();
 
     validate_command_line_args(&cli_args);
@@ -52,16 +53,24 @@ fn main() {
 
     let db = db_result.unwrap();
     for cmd in db.get_all_compile_commands().get_commands() {
-        if let Err(err ) = std::env::set_current_dir(cmd.get_directory()) {
+        if let Err(err) = std::env::set_current_dir(cmd.get_directory()) {
             eprintln!("{}: {}", cmd.get_directory().display(), err);
             std::process::exit(1);
         }
 
         let mut args = cmd.get_arguments();
         args.append(&mut sys_include_flags.clone());
-        args = args.into_iter().filter(
-            |name| name != &cmd.get_filename().file_name().unwrap().to_string_lossy().to_string()
-        ).collect();
+        args = args
+            .into_iter()
+            .filter(|name| {
+                name != &cmd
+                    .get_filename()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string()
+            })
+            .collect();
 
         let mut parser = index.parser(cmd.get_filename());
         let parser = parser.arguments(&args);
@@ -80,11 +89,8 @@ fn main() {
         // println!("====");
         // println!("{:?}", walk_result.constraints[1]);
         // constraint_system_to_linear_system(&vec![walk_result.constraints[1].clone()]);
-        let (system, object_name_to_colums)
-             = constraint_system_to_linear_system(
-                &walk_result.constraints,
-                cli_args.show_equations,
-        );
+        let (system, object_name_to_colums) =
+            constraint_system_to_linear_system(&walk_result.constraints, cli_args.show_equations);
 
         let mut a = Vec::<Vec<f64>>::new();
         for row in &system {
@@ -97,10 +103,11 @@ fn main() {
             b.push(*row.last().unwrap());
         }
 
-        let mut tmp_terms: Vec<constraints::Object> =
-            walk_result.tmp_terms_to_repair_contexts.keys()
-                .map(|o| o.clone())
-                .collect();
+        let mut tmp_terms: Vec<constraints::Object> = walk_result
+            .tmp_terms_to_repair_contexts
+            .keys()
+            .map(|o| o.clone())
+            .collect();
         let result = do_sparsest_repair(
             &a,
             &b,
@@ -126,6 +133,30 @@ fn main() {
     }
 }
 
+fn play_with_z3() {
+    let cfg = z3::Config::new();
+    let ctx = z3::Context::new(&cfg);
+    let x = z3::ast::Int::new_const(&ctx, "x");
+    let y = z3::ast::Int::new_const(&ctx, "y");
+
+    let solver = z3::Solver::new(&ctx);
+    let _42_const = z3::ast::Int::from_i64(&ctx, 42);
+    solver.assert(&z3::ast::Bool::and(
+        &ctx,
+        &[&y.le(&_42_const), &x.lt(&_42_const)],
+    ));
+
+    if solver.check() == z3::SatResult::Unsat {
+        eprintln!("Could not solve!");
+        std::process::exit(1);
+    }
+
+    let model = solver.get_model().unwrap();
+    let x_solution = model.get_const_interp(&x);
+    let y_solution = model.get_const_interp(&y);
+    println!("x = {}, y = {}", x_solution.unwrap(), y_solution.unwrap());
+}
+
 fn validate_command_line_args(args: &Cli) {
     if let Err(err) = std::fs::metadata(&args.compile_commands_directory) {
         eprintln!("{}: {}", args.compile_commands_directory, err);
@@ -133,9 +164,13 @@ fn validate_command_line_args(args: &Cli) {
     }
 }
 
-fn do_sparsest_repair(system: &Vec<Vec<f64>>, result: &Vec<f64>, object_to_column: &HashMap<constraints::Object, i32>,
-                      terms_to_contexts: &HashMap<constraints::Object, walker::RepairContext>,
-                      temp_terms: &mut Vec<constraints::Object>) -> bool {
+fn do_sparsest_repair(
+    system: &Vec<Vec<f64>>,
+    result: &Vec<f64>,
+    object_to_column: &HashMap<constraints::Object, i32>,
+    terms_to_contexts: &HashMap<constraints::Object, walker::RepairContext>,
+    temp_terms: &mut Vec<constraints::Object>,
+) -> bool {
     if temp_terms.is_empty() {
         let a = DMatrix::from_fn(system.len(), system[0].len(), |i, j| system[i][j]);
         let b = DVector::from_iterator(result.len(), result.clone());
@@ -151,7 +186,8 @@ fn do_sparsest_repair(system: &Vec<Vec<f64>>, result: &Vec<f64>, object_to_colum
 
     let candidate_zero_term = temp_terms.pop().unwrap();
     let mut new_row = vec![0.0; system[0].len()];
-    new_row[*object_to_column.get(&candidate_zero_term).unwrap() as usize * COLUMNS_PER_OBJECT] = 1.0;
+    new_row[*object_to_column.get(&candidate_zero_term).unwrap() as usize * COLUMNS_PER_OBJECT] =
+        1.0;
 
     let mut new_system = system.clone();
     new_system.push(new_row);
@@ -159,14 +195,30 @@ fn do_sparsest_repair(system: &Vec<Vec<f64>>, result: &Vec<f64>, object_to_colum
     let mut new_result = result.clone();
     new_result.push(0.0);
 
-    if do_sparsest_repair(&new_system, &new_result, object_to_column, terms_to_contexts, temp_terms) {
+    if do_sparsest_repair(
+        &new_system,
+        &new_result,
+        object_to_column,
+        terms_to_contexts,
+        temp_terms,
+    ) {
         return true;
     } else {
-        return do_sparsest_repair(system, result, object_to_column, terms_to_contexts, temp_terms);
+        return do_sparsest_repair(
+            system,
+            result,
+            object_to_column,
+            terms_to_contexts,
+            temp_terms,
+        );
     }
 }
 
-fn generate_repair(x: Lstsq<f64, nalgebra::Dyn>, object_to_column: &HashMap<constraints::Object, i32>, terms_to_contexts: &HashMap<constraints::Object, walker::RepairContext>) {
+fn generate_repair(
+    x: Lstsq<f64, nalgebra::Dyn>,
+    object_to_column: &HashMap<constraints::Object, i32>,
+    terms_to_contexts: &HashMap<constraints::Object, walker::RepairContext>,
+) {
     let solution = x.solution;
     // for i in 0..solution.shape().0 {
     //     println!("{}, {}", i, solution[i]);
@@ -177,11 +229,16 @@ fn generate_repair(x: Lstsq<f64, nalgebra::Dyn>, object_to_column: &HashMap<cons
             Some(column) => {
                 let real_column = constraints::COLUMNS_PER_OBJECT * (*column as usize);
                 //println!("{} in {} at {} -> {}", obj.label, context.original_expression, context.source_location, solution[real_column]);
-                if  solution[real_column].abs() > 0.00000001 {
-                    println!("{}: (pow(10.0, {:.3}) * ({}))", context.source_location, solution[real_column] * -1.0, context.original_expression);
+                if solution[real_column].abs() > 0.00000001 {
+                    println!(
+                        "{}: (pow(10.0, {:.3}) * ({}))",
+                        context.source_location,
+                        solution[real_column] * -1.0,
+                        context.original_expression
+                    );
                 }
-            },
-            None => eprintln!("WARNING: Unable to find column for constant {}", obj.label)
+            }
+            None => eprintln!("WARNING: Unable to find column for constant {}", obj.label),
         }
     }
 }

@@ -30,14 +30,23 @@ pub fn get_system_include_paths(compiler: &str) -> Result<Vec<String>, Box<dyn E
 
 pub fn get_system_include_flags(compiler: &str) -> Result<Vec<String>, Box<dyn Error>> {
     let search_paths = get_system_include_paths(compiler)?;
-    Ok(search_paths.iter().map(|path| "-I".to_owned() + path.split_whitespace().collect::<Vec<&str>>()[0]).collect())
+    Ok(search_paths
+        .iter()
+        .map(|path| "-I".to_owned() + path.split_whitespace().collect::<Vec<&str>>()[0])
+        .collect())
 }
 
 fn comment_child_to_string(child: clang::documentation::CommentChild) -> String {
     if let clang::documentation::CommentChild::Text(str) = child {
         str
     } else if let clang::documentation::CommentChild::Paragraph(babies) = child {
-        babies.into_iter().map(comment_child_to_string).collect::<Vec<String>>().join(" ").trim().to_string()
+        babies
+            .into_iter()
+            .map(comment_child_to_string)
+            .collect::<Vec<String>>()
+            .join(" ")
+            .trim()
+            .to_string()
     } else {
         String::from("")
     }
@@ -48,11 +57,17 @@ pub fn get_comment_text(comment: &clang::documentation::Comment) -> String {
     if children.is_empty() {
         String::from("")
     } else {
-        children.into_iter().map(comment_child_to_string).collect::<Vec<String>>().join(" ").trim().to_string()
+        children
+            .into_iter()
+            .map(comment_child_to_string)
+            .collect::<Vec<String>>()
+            .join(" ")
+            .trim()
+            .to_string()
     }
 }
 
-pub fn get_initialization<'a>(definition: &'a clang::Entity) -> Option<clang::Entity::<'a>> {
+pub fn get_initialization<'a>(definition: &'a clang::Entity) -> Option<clang::Entity<'a>> {
     if !definition.is_definition() {
         return None;
     }
@@ -70,26 +85,26 @@ pub fn has_initialization(definition: &clang::Entity) -> bool {
 }
 
 pub fn get_entity_spelling(entity: &clang::Entity) -> Option<String> {
-    entity.get_range().and_then(
-        |range|
-            Some(
-                range
-                    .tokenize()
-                    .into_iter()
-                    .map(|token| token.get_spelling())
-                    .collect::<Vec<String>>()
-                    .join(" ")
-            )
-    )
+    entity.get_range().and_then(|range| {
+        Some(
+            range
+                .tokenize()
+                .into_iter()
+                .map(|token| token.get_spelling())
+                .collect::<Vec<String>>()
+                .join(" "),
+        )
+    })
 }
 
 pub fn spell_source_location(entity: &clang::Entity) -> String {
-    entity.get_location().
-        and_then(
-            |location| {
-                let (file, line, col) = location.get_presumed_location();
-                Some(format!("file {} on line {} column {}", file, line, col))
-            }).unwrap_or(String::from("Unknown location"))
+    entity
+        .get_location()
+        .and_then(|location| {
+            let (file, line, col) = location.get_presumed_location();
+            Some(format!("file {} on line {} column {}", file, line, col))
+        })
+        .unwrap_or(String::from("Unknown location"))
 }
 
 pub fn get_rhs<'a>(entity: &'a clang::Entity) -> Option<clang::Entity<'a>> {
@@ -97,29 +112,20 @@ pub fn get_rhs<'a>(entity: &'a clang::Entity) -> Option<clang::Entity<'a>> {
 }
 
 pub fn get_binary_operator(entity: &clang::Entity) -> Option<String> {
-    let left_offset =
-        entity
-            .get_child(0)
-            .iter()
-            .map(|child| child.get_range().and_then(|r| Some(r.tokenize().len())))
-            .fold(
-                Some(0),
-                |acc, elt| {
-                    match (acc, elt) {
-                        (Some(acc), Some(elt)) => Some(acc + elt),
-                        _ => None,
-                    }
-                },
-            );
+    let left_offset = entity
+        .get_child(0)
+        .iter()
+        .map(|child| child.get_range().and_then(|r| Some(r.tokenize().len())))
+        .fold(Some(0), |acc, elt| match (acc, elt) {
+            (Some(acc), Some(elt)) => Some(acc + elt),
+            _ => None,
+        });
 
     if left_offset.is_none() {
         return None;
     }
 
-    let entity_tokens =
-        entity
-            .get_range()
-            .and_then(|r| Some(r.tokenize()));
+    let entity_tokens = entity.get_range().and_then(|r| Some(r.tokenize()));
     if entity_tokens.is_none() {
         return None;
     }

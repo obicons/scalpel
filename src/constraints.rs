@@ -1,5 +1,5 @@
-use std::{rc::Rc, collections::HashMap};
-use crate::types::{self, NUM_BASE_UNITS, SIBaseUnits};
+use crate::types::{self, SIBaseUnits, NUM_BASE_UNITS};
+use std::{collections::HashMap, rc::Rc};
 
 pub const COLUMNS_PER_OBJECT: usize = 1 + NUM_BASE_UNITS;
 
@@ -23,18 +23,16 @@ impl std::fmt::Display for Constraint {
 
 // Types define a natural constraint: Each members must be equal to what we expect.
 pub fn type_to_constraint(t: &types::Type, obj: Rc<Object>) -> Rc<Constraint> {
-    let mut eqs: Vec<Rc<Equation>> = vec![
-        Rc::new(Equation {
-            term: Rc::new(Term::Object(obj.clone(), Selector::ScalarPrefix)),
-            value: t.scalar_prefix,
-        })
-    ];
+    let mut eqs: Vec<Rc<Equation>> = vec![Rc::new(Equation {
+        term: Rc::new(Term::Object(obj.clone(), Selector::ScalarPrefix)),
+        value: t.scalar_prefix,
+    })];
     for dimension in 0..types::NUM_BASE_UNITS {
-        eqs.push(Rc::new(Equation{
+        eqs.push(Rc::new(Equation {
             term: Rc::new(Term::Object(
-                            obj.clone(),
-                            Selector::BaseUnit(types::SIBaseUnits::from(dimension))
-                        )),
+                obj.clone(),
+                Selector::BaseUnit(types::SIBaseUnits::from(dimension)),
+            )),
             value: t.si_units[dimension] as f64,
         }));
     }
@@ -44,28 +42,33 @@ pub fn type_to_constraint(t: &types::Type, obj: Rc<Object>) -> Rc<Constraint> {
         Rc::new(Constraint::Equation(eqs[0].clone())),
         Rc::new(Constraint::Equation(eqs[1].clone())),
     ));
-    eqs.split_off(2).into_iter().fold(
-        and1,
-        |constraint, eq|
-            Rc::new(Constraint::And(constraint, Rc::new(Constraint::Equation(eq))))
-    )
+    eqs.split_off(2).into_iter().fold(and1, |constraint, eq| {
+        Rc::new(Constraint::And(
+            constraint,
+            Rc::new(Constraint::Equation(eq)),
+        ))
+    })
 }
 
 pub fn assert_equal(obj1: Rc<Object>, obj2: Rc<Object>) -> Rc<Constraint> {
-    let mut eqs: Vec<Rc<Equation>> = vec![
-        Rc::new(Equation {
-                    term: Rc::new(Term::Sub(
-                        Rc::new(Term::Object(obj1.clone(), Selector::ScalarPrefix)),
-                        Rc::new(Term::Object(obj2.clone(), Selector::ScalarPrefix)),
-                    )),
-                    value: 0.0,
-                })
-    ];
+    let mut eqs: Vec<Rc<Equation>> = vec![Rc::new(Equation {
+        term: Rc::new(Term::Sub(
+            Rc::new(Term::Object(obj1.clone(), Selector::ScalarPrefix)),
+            Rc::new(Term::Object(obj2.clone(), Selector::ScalarPrefix)),
+        )),
+        value: 0.0,
+    })];
     for dimension in 0..types::NUM_BASE_UNITS {
-        eqs.push(Rc::new(Equation{
+        eqs.push(Rc::new(Equation {
             term: Rc::new(Term::Sub(
-                Rc::new(Term::Object(obj1.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
-                Rc::new(Term::Object(obj2.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
+                Rc::new(Term::Object(
+                    obj1.clone(),
+                    Selector::BaseUnit(types::SIBaseUnits::from(dimension)),
+                )),
+                Rc::new(Term::Object(
+                    obj2.clone(),
+                    Selector::BaseUnit(types::SIBaseUnits::from(dimension)),
+                )),
             )),
             value: 0.0,
         }));
@@ -75,32 +78,52 @@ pub fn assert_equal(obj1: Rc<Object>, obj2: Rc<Object>) -> Rc<Constraint> {
         Rc::new(Constraint::Equation(eqs[0].clone())),
         Rc::new(Constraint::Equation(eqs[1].clone())),
     ));
-    eqs.split_off(2).into_iter().fold(
-        and1,
-        |constraint, eq|
-            Rc::new(Constraint::And(constraint, Rc::new(Constraint::Equation(eq))))
-    )
+    eqs.split_off(2).into_iter().fold(and1, |constraint, eq| {
+        Rc::new(Constraint::And(
+            constraint,
+            Rc::new(Constraint::Equation(eq)),
+        ))
+    })
+}
+
+// Asserts that the numeric literal has the scalar multiple represented by it.
+pub fn assert_literal(x: f64, literal_label: &str) -> Rc<Constraint> {
+    Rc::new(Constraint::Equation(Rc::new(Equation {
+        term: Rc::new(Term::Object(
+            Rc::new(Object::new(literal_label)),
+            Selector::ScalarPrefix,
+        )),
+        value: (1. / x).log10(),
+    })))
 }
 
 // Asserts that rhs can be repaired into lhs.
-pub fn assert_repairable(lhs: Rc<Object>, rhs: Rc<Object>, repair_term: Rc<Object>) -> Rc<Constraint> {
-    let mut eqs: Vec<Rc<Equation>> = vec![
-        Rc::new(Equation {
-                    term: Rc::new(Term::Sub(
-                        Rc::new(Term::Object(lhs.clone(), Selector::ScalarPrefix)),
-                        Rc::new(Term::Add(
-                            Rc::new(Term::Object(rhs.clone(), Selector::ScalarPrefix)),
-                            Rc::new(Term::Object(repair_term.clone(), Selector::ScalarPrefix)),
-                        )),
-                    )),
-                    value: 0.0,
-                })
-    ];
+pub fn assert_repairable(
+    lhs: Rc<Object>,
+    rhs: Rc<Object>,
+    repair_term: Rc<Object>,
+) -> Rc<Constraint> {
+    let mut eqs: Vec<Rc<Equation>> = vec![Rc::new(Equation {
+        term: Rc::new(Term::Sub(
+            Rc::new(Term::Object(lhs.clone(), Selector::ScalarPrefix)),
+            Rc::new(Term::Add(
+                Rc::new(Term::Object(rhs.clone(), Selector::ScalarPrefix)),
+                Rc::new(Term::Object(repair_term.clone(), Selector::ScalarPrefix)),
+            )),
+        )),
+        value: 0.0,
+    })];
     for dimension in 0..types::NUM_BASE_UNITS {
-        eqs.push(Rc::new(Equation{
+        eqs.push(Rc::new(Equation {
             term: Rc::new(Term::Sub(
-                Rc::new(Term::Object(lhs.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
-                Rc::new(Term::Object(rhs.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
+                Rc::new(Term::Object(
+                    lhs.clone(),
+                    Selector::BaseUnit(types::SIBaseUnits::from(dimension)),
+                )),
+                Rc::new(Term::Object(
+                    rhs.clone(),
+                    Selector::BaseUnit(types::SIBaseUnits::from(dimension)),
+                )),
             )),
             value: 0.0,
         }));
@@ -110,34 +133,46 @@ pub fn assert_repairable(lhs: Rc<Object>, rhs: Rc<Object>, repair_term: Rc<Objec
         Rc::new(Constraint::Equation(eqs[0].clone())),
         Rc::new(Constraint::Equation(eqs[1].clone())),
     ));
-    eqs.split_off(2).into_iter().fold(
-        and1,
-        |constraint, eq|
-            Rc::new(Constraint::And(constraint, Rc::new(Constraint::Equation(eq))))
-    )
+    eqs.split_off(2).into_iter().fold(and1, |constraint, eq| {
+        Rc::new(Constraint::And(
+            constraint,
+            Rc::new(Constraint::Equation(eq)),
+        ))
+    })
 }
 
 // Creates a new type by multiplying lhs and rhs.
-pub fn create_multiplicative_type(result_type: Rc<Object>, lhs: Rc<Object>, rhs: Rc<Object>) -> Rc<Constraint> {
-    let mut eqs: Vec<Rc<Equation>> = vec![
-        Rc::new(Equation {
-                    term: Rc::new(Term::Sub(
-                        Rc::new(Term::Object(result_type.clone(), Selector::ScalarPrefix)),
-                        Rc::new(Term::Add(
-                            Rc::new(Term::Object(lhs.clone(), Selector::ScalarPrefix)),
-                            Rc::new(Term::Object(rhs.clone(), Selector::ScalarPrefix)),
-                        )),
-                    )),
-                    value: 0.0,
-                })
-    ];
+pub fn create_multiplicative_type(
+    result_type: Rc<Object>,
+    lhs: Rc<Object>,
+    rhs: Rc<Object>,
+) -> Rc<Constraint> {
+    let mut eqs: Vec<Rc<Equation>> = vec![Rc::new(Equation {
+        term: Rc::new(Term::Sub(
+            Rc::new(Term::Object(result_type.clone(), Selector::ScalarPrefix)),
+            Rc::new(Term::Add(
+                Rc::new(Term::Object(lhs.clone(), Selector::ScalarPrefix)),
+                Rc::new(Term::Object(rhs.clone(), Selector::ScalarPrefix)),
+            )),
+        )),
+        value: 0.0,
+    })];
     for dimension in 0..types::NUM_BASE_UNITS {
-        eqs.push(Rc::new(Equation{
+        eqs.push(Rc::new(Equation {
             term: Rc::new(Term::Sub(
-                Rc::new(Term::Object(result_type.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
+                Rc::new(Term::Object(
+                    result_type.clone(),
+                    Selector::BaseUnit(types::SIBaseUnits::from(dimension)),
+                )),
                 Rc::new(Term::Add(
-                    Rc::new(Term::Object(lhs.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
-                    Rc::new(Term::Object(rhs.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
+                    Rc::new(Term::Object(
+                        lhs.clone(),
+                        Selector::BaseUnit(types::SIBaseUnits::from(dimension)),
+                    )),
+                    Rc::new(Term::Object(
+                        rhs.clone(),
+                        Selector::BaseUnit(types::SIBaseUnits::from(dimension)),
+                    )),
                 )),
             )),
             value: 0.0,
@@ -148,34 +183,46 @@ pub fn create_multiplicative_type(result_type: Rc<Object>, lhs: Rc<Object>, rhs:
         Rc::new(Constraint::Equation(eqs[0].clone())),
         Rc::new(Constraint::Equation(eqs[1].clone())),
     ));
-    eqs.split_off(2).into_iter().fold(
-        and1,
-        |constraint, eq|
-            Rc::new(Constraint::And(constraint, Rc::new(Constraint::Equation(eq))))
-    )
+    eqs.split_off(2).into_iter().fold(and1, |constraint, eq| {
+        Rc::new(Constraint::And(
+            constraint,
+            Rc::new(Constraint::Equation(eq)),
+        ))
+    })
 }
 
 // Creates a new type by dividing lhs and rhs.
-pub fn create_division_type(result_type: Rc<Object>, lhs: Rc<Object>, rhs: Rc<Object>) -> Rc<Constraint> {
-    let mut eqs: Vec<Rc<Equation>> = vec![
-        Rc::new(Equation {
-                    term: Rc::new(Term::Sub(
-                        Rc::new(Term::Object(result_type.clone(), Selector::ScalarPrefix)),
-                        Rc::new(Term::Add(
-                            Rc::new(Term::Object(lhs.clone(), Selector::ScalarPrefix)),
-                            Rc::new(Term::Object(rhs.clone(), Selector::ScalarPrefix)),
-                        )),
-                    )),
-                    value: 0.0,
-                })
-    ];
+pub fn create_division_type(
+    result_type: Rc<Object>,
+    lhs: Rc<Object>,
+    rhs: Rc<Object>,
+) -> Rc<Constraint> {
+    let mut eqs: Vec<Rc<Equation>> = vec![Rc::new(Equation {
+        term: Rc::new(Term::Sub(
+            Rc::new(Term::Object(result_type.clone(), Selector::ScalarPrefix)),
+            Rc::new(Term::Add(
+                Rc::new(Term::Object(lhs.clone(), Selector::ScalarPrefix)),
+                Rc::new(Term::Object(rhs.clone(), Selector::ScalarPrefix)),
+            )),
+        )),
+        value: 0.0,
+    })];
     for dimension in 0..types::NUM_BASE_UNITS {
-        eqs.push(Rc::new(Equation{
+        eqs.push(Rc::new(Equation {
             term: Rc::new(Term::Add(
-                Rc::new(Term::Object(result_type.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
+                Rc::new(Term::Object(
+                    result_type.clone(),
+                    Selector::BaseUnit(types::SIBaseUnits::from(dimension)),
+                )),
                 Rc::new(Term::Sub(
-                    Rc::new(Term::Object(rhs.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
-                    Rc::new(Term::Object(lhs.clone(), Selector::BaseUnit(types::SIBaseUnits::from(dimension)))),
+                    Rc::new(Term::Object(
+                        rhs.clone(),
+                        Selector::BaseUnit(types::SIBaseUnits::from(dimension)),
+                    )),
+                    Rc::new(Term::Object(
+                        lhs.clone(),
+                        Selector::BaseUnit(types::SIBaseUnits::from(dimension)),
+                    )),
                 )),
             )),
             value: 0.0,
@@ -186,11 +233,12 @@ pub fn create_division_type(result_type: Rc<Object>, lhs: Rc<Object>, rhs: Rc<Ob
         Rc::new(Constraint::Equation(eqs[0].clone())),
         Rc::new(Constraint::Equation(eqs[1].clone())),
     ));
-    eqs.split_off(2).into_iter().fold(
-        and1,
-        |constraint, eq|
-            Rc::new(Constraint::And(constraint, Rc::new(Constraint::Equation(eq))))
-    )
+    eqs.split_off(2).into_iter().fold(and1, |constraint, eq| {
+        Rc::new(Constraint::And(
+            constraint,
+            Rc::new(Constraint::Equation(eq)),
+        ))
+    })
 }
 
 #[derive(Clone, Debug)]
@@ -248,7 +296,9 @@ impl std::fmt::Display for Object {
 
 impl Object {
     pub fn new(label: &str) -> Object {
-        Object{label: String::from(label)}
+        Object {
+            label: String::from(label),
+        }
     }
 }
 
@@ -257,26 +307,20 @@ fn add_term_to_map(term: &Rc<Term>, object_to_column: &mut HashMap<Object, i32>)
         Term::Add(t1, t2) => {
             add_term_to_map(t1, object_to_column);
             add_term_to_map(t2, object_to_column);
-        },
+        }
         Term::Sub(t1, t2) => {
             add_term_to_map(t1, object_to_column);
             add_term_to_map(t2, object_to_column);
-        },
+        }
         Term::Object(o, _) => {
             if let None = object_to_column.get(o) {
-                let max_id = object_to_column.values().reduce(
-                    |max, col| {
-                        if col > max {
-                            col
-                        } else {
-                            max
-                        }
-                    }
-                );
+                let max_id = object_to_column
+                    .values()
+                    .reduce(|max, col| if col > max { col } else { max });
 
                 object_to_column.insert(Object::new(&o.label), *max_id.unwrap_or(&-1) + 1);
             }
-        },
+        }
     }
 }
 
@@ -285,10 +329,10 @@ fn add_constraint_to_map(constraint: &Constraint, map: &mut HashMap<Object, i32>
         Constraint::And(c1, c2) => {
             add_constraint_to_map(c1, map);
             add_constraint_to_map(c2, map);
-        },
+        }
         Constraint::Equation(eq) => {
             add_term_to_map(&eq.term, map);
-        },
+        }
     }
 }
 
@@ -300,14 +344,16 @@ fn constraint_objects_to_column_numbers(constraints: &Vec<Rc<Constraint>>) -> Ha
     return result;
 }
 
-fn add_term_to_row(term: &Rc<Term>,
-                   object_to_column_offset: &HashMap<Object, i32>,
-                   row: &mut Vec<f64>) {
+fn add_term_to_row(
+    term: &Rc<Term>,
+    object_to_column_offset: &HashMap<Object, i32>,
+    row: &mut Vec<f64>,
+) {
     match &**term {
         Term::Add(t1, t2) => {
             add_term_to_row(t1, object_to_column_offset, row);
             add_term_to_row(t2, object_to_column_offset, row);
-        },
+        }
         Term::Sub(t1, t2) => {
             add_term_to_row(t1, object_to_column_offset, row);
 
@@ -317,30 +363,32 @@ fn add_term_to_row(term: &Rc<Term>,
             for i in 0..tmp.len() {
                 row[i] -= tmp[i];
             }
-        },
+        }
         Term::Object(object, selector) => {
             let idx = (*object_to_column_offset.get(object).unwrap() as usize) * COLUMNS_PER_OBJECT;
             match selector {
                 Selector::BaseUnit(bu) => {
                     let offset: usize = bu.into_usize() + 1;
                     row[idx + offset] += 1.0;
-                },
+                }
                 Selector::ScalarPrefix => {
                     row[idx] += 1.0;
-                },
+                }
             }
-        },
+        }
     }
 }
 
-fn add_constraint_to_system(constraint: &Constraint,
-                            object_to_column_offset: &HashMap<Object, i32>,
-                            system: &mut Vec<Vec<f64>>) {
+fn add_constraint_to_system(
+    constraint: &Constraint,
+    object_to_column_offset: &HashMap<Object, i32>,
+    system: &mut Vec<Vec<f64>>,
+) {
     match constraint {
         Constraint::And(c1, c2) => {
             add_constraint_to_system(c1, object_to_column_offset, system);
             add_constraint_to_system(c2, object_to_column_offset, system);
-        },
+        }
         Constraint::Equation(eq) => {
             let mut eq_row = Vec::<f64>::new();
             let total_columns = COLUMNS_PER_OBJECT * object_to_column_offset.keys().len() + 1;
@@ -352,11 +400,14 @@ fn add_constraint_to_system(constraint: &Constraint,
             eq_row[last_idx] = eq.value;
             add_term_to_row(&eq.term, object_to_column_offset, &mut eq_row);
             system.push(eq_row);
-        },
+        }
     }
 }
 
-pub fn constraint_system_to_linear_system(constraints: &Vec<Rc<Constraint>>, output_csv: bool) -> (Vec<Vec<f64>>, HashMap<Object, i32>) {
+pub fn constraint_system_to_linear_system(
+    constraints: &Vec<Rc<Constraint>>,
+    output_csv: bool,
+) -> (Vec<Vec<f64>>, HashMap<Object, i32>) {
     // Step 1: Map each object appearing in a constraint to a unique column number.
     let object_name_to_column = constraint_objects_to_column_numbers(constraints);
 
@@ -365,9 +416,7 @@ pub fn constraint_system_to_linear_system(constraints: &Vec<Rc<Constraint>>, out
     // Each row has columns_per_object columns.
     let mut system = Vec::<Vec<f64>>::new();
     for constraint in constraints {
-        add_constraint_to_system(constraint,
-                                 &object_name_to_column,
-                                 &mut system);
+        add_constraint_to_system(constraint, &object_name_to_column, &mut system);
     }
 
     if output_csv {
@@ -382,7 +431,12 @@ pub fn constraint_system_to_linear_system(constraints: &Vec<Rc<Constraint>>, out
             sep = ",";
 
             for j in 0..NUM_BASE_UNITS {
-                print!("{}{}.{:?}", sep, header.get(&(i as i32)).unwrap(), SIBaseUnits::from(j));
+                print!(
+                    "{}{}.{:?}",
+                    sep,
+                    header.get(&(i as i32)).unwrap(),
+                    SIBaseUnits::from(j)
+                );
             }
         }
         println!("{}equals", sep);
