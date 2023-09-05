@@ -6,7 +6,7 @@ pkgs.rustPlatform.buildRustPackage rec {
 
   src = builtins.path { path = ./.; name = "scalpel"; };
 
-  cargoHash = "sha256-46+p3hgmD0OTj0fY5Q8exW0cHIAEtN0ByBddiTvpElU=";
+  cargoHash = "sha256-rkxM4fay8jr52Xal+umGjNXaBM9lt6R5C2M6nzA8u6A=";
 
   buildInputs = [ pkgs.z3_4_11 ];
 }
