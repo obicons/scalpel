@@ -9,7 +9,7 @@ pub struct RepairContext {
     pub original_expression: String,
 }
 
-pub struct WalkResult<'a> {
+pub struct WalkContext<'a> {
     context: Vec<String>,
     pub constraints: Vec<Rc<constraints::Constraint>>,
     object_name: Option<String>,
@@ -27,14 +27,14 @@ pub struct WalkResult<'a> {
 pub fn extract_types<'a>(
     tu: &clang::TranslationUnit,
     solver: &'a z3::Optimize<'a>,
-) -> WalkResult<'a> {
+) -> WalkContext<'a> {
     let root_entity = tu.get_entity();
-    let mut w = WalkResult::new(&solver);
+    let mut w = WalkContext::new(&solver);
     root_entity.visit_children(|n, p| w.analyze_entity(n, p));
     return w;
 }
 
-impl<'a> WalkResult<'a> {
+impl<'a> WalkContext<'a> {
     fn qualify_name(&self, name: &str) -> String {
         if self.context.len() > 0 {
             self.context.join("::") + "::" + name
@@ -297,8 +297,8 @@ impl<'a> WalkResult<'a> {
         }
     }
 
-    fn new(solver: &'a z3::Optimize<'a>) -> WalkResult<'a> {
-        WalkResult {
+    fn new(solver: &'a z3::Optimize<'a>) -> WalkContext<'a> {
+        WalkContext {
             context: vec![],
             constraints: vec![],
             object_name: None,
