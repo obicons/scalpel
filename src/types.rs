@@ -60,13 +60,28 @@ pub struct Type {
 }
 
 pub fn parse_type_comment<'a>(text: &'a str) -> Option<(&'a str, Type)> {
-    let v: Vec<&str> = text.split(":").collect();
-    if v.len() != 2 {
-        return None;
+    let type_regex =
+        regex::Regex::new("([a-zA-Z_]+[a-zA-Z0-9_]*)\\s?:\\s?([a-zA-Z0-9\\^_]+)").unwrap();
+    for caps in type_regex.captures_iter(text) {
+        let (_, [var_name, typename]) = caps.extract();
+        if let Some(the_type) = parse_human_type(typename) {
+            return Some((var_name, the_type));
+        }
     }
 
-    parse_human_type(v[1].trim()).and_then(|t| Some((v[0], t)))
+    return None;
 }
+
+// pub fn parse_type_comment<'a>(text: &'a str) -> Option<(&'a str, Type)> {
+//     let type_regex = regex::Regex::new("([a-zA-Z_]+[a-zA-Z0-9_]*)\\w?:\\w?");
+
+//     let v: Vec<&str> = text.split(":").collect();
+//     if v.len() != 2 {
+//         return None;
+//     }
+
+//     parse_human_type(v[1].trim()).and_then(|t| Some((v[0], t)))
+// }
 
 pub fn parse_human_type(text: &str) -> Option<Type> {
     let m: HashMap<&str, Type> = HashMap::from([

@@ -21,11 +21,12 @@ namespace n1 {
     }
 }
 
-// MyComment
 int main() {
     /// x: m
+    /// frame(x) = (global, _)
     double x;
 
     /// z: cm
+    /// frame(z) = (local, _)
     double z = x;
 }

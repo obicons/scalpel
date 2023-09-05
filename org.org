@@ -1,0 +1,75 @@
+Scalpel -*- mode: org -*-
+
+* On Frames of Reference
+
+A frame of reference describes how a measurement was obtained.
+They only apply to inertial measurements.
+- =GLOBAL=: Obtained from GPS.
+- =LOCAL=: Relative to the vehicle.
+
+Both =GLOBAL= and =LOCAL= can also be qualified with a temporal frame.
+There are two temporal frames:
+- =BOOT=: Time since the system booted.
+- =EPOCH=: Time since the UNIX epoch.
+
+This is kind of problematic. A measurement like =current_time= doesn't /have/ an inertial frame.
+It's under-determined.
+It only becomes determined through use with a value /with/ an inertial frame.
+(And vice versa.)
+
+Some examples:
+#+begin_src C++
+  #include <iostream>
+
+  using namespace std;
+
+  int main() {
+    // This value is arbitrary.
+    // elapsed_time: (seconds, (BOOT))
+    int elapsed_time = 42;
+
+    // This value is arbitrary.
+    // distance_traveled: (meters, (GLOBAL))
+    int distance_traveled = 55;
+
+    int speed = distance_traveled / elapsed_time;
+    // Okay, from an analysis point-of-view, we can now add the constaint that
+    // distance_traveled and elapsed_time share a reference frame.
+    // This is alright, since there was no constaint on elapsed_time's position
+    // and no constraint on distance_traveled's time.
+  }
+#+end_src
+
+** How to repair?
+For starters, generate this constraint:
+#+begin_src
+
+multiplicative_op ::= * | /
+
+
+a <multiplicative_op> b
+--------------------------------------------------------------------------
+(frame(a) = frame(b) /\ conv_1_const = 0 /\ conv_1 = noop)                               \/
+(frame(a) = global /\ frame(b) = local /\ conv_1 = local_to_global /\ conv_1_const = 1)  \/
+(frame(a) = local /\ frame(b) = global /\ conv_1 = global_to_local /\ conv_1_const = 1)  \/
+(frame(a) = epoch /\ frame(b) = boot /\ conv_1 = boot_to_epoch /\ conv_1_const = 1)      \/
+(frame(a) = boot /\ frame(b) = epoch /\ conv_1 = epoch_to_boot /\ conv_1_const = 1)      \/
+(frame(a) = boot /\ frame(b) = local /\ conv_1 = noop /\ conv_1_const = 0)               \/
+(frame(a) = epoch /\ frame(b) = local /\ conv_1 = noop /\ conv_1_const = 0)              \/
+(frame(a) = boot /\ frame(b) = global /\ conv_1 = noop /\ conv_1_const = 0)              \/
+(frame(a) = epoch /\ frame(b) = global /\ conv_1 = noop /\ conv_1_const = 0)             \/
+(frame(a) = local /\ frame(b) = boot /\ conv_1 = noop /\ conv_1_const = 0)               \/
+(frame(a) = local /\ frame(b) = epoch /\ conv_1 = noop /\ conv_1_const = 0)              \/
+(frame(a) = global /\ frame(b) = boot /\ conv_1 = noop /\ conv_1_const = 0)              \/
+(frame(a) = global /\ frame(b) = epoch /\ conv_1 = noop /\ conv_1_const = 0)
+minimize conv_1_const + ... + conv_n_const
+
+a = b
+------------------
+(frame(a) = frame(b) /\ conv_1_const = 0 /\ conv_1 = noop)                              \/
+(frame(a) = global /\ frame(b) = local /\ conv_1 = local_to_global /\ conv_1_const = 1) \/
+(frame(a) = local /\ frame(b) = global /\ conv_1 = global_to_local /\ conv_1_const = 1) \/
+(frame(a) = boot /\ frame(b) = epoch /\ conv_1 = epoch_to_boot /\ conv_1_const = 1)     \/
+(frame(a) = epoch /\ frame(b) = boot /\ conv_1 = boot_to_epoch /\ conv_1_const = 1)     \/
+
+#+end_src

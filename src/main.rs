@@ -25,8 +25,6 @@ struct Cli {
 }
 
 fn main() {
-    play_with_z3();
-    std::process::exit(0);
     let cli_args = Cli::parse();
 
     validate_command_line_args(&cli_args);
@@ -50,6 +48,10 @@ fn main() {
         std::process::exit(1);
     }
     let sys_include_flags = sys_include_flags_result.unwrap();
+
+    let z3_config = z3::Config::new();
+    let z3_context = z3::Context::new(&z3_config);
+    let z3_solver = z3::Optimize::new(&z3_context);
 
     let db = db_result.unwrap();
     for cmd in db.get_all_compile_commands().get_commands() {
@@ -80,15 +82,8 @@ fn main() {
             std::process::exit(1);
         }
 
-        let walk_result = walker::extract_types(&tu_result.unwrap());
-        //println!("{:?}", walk_result.constraints);
-        // for row in &walk_result.constraints {
-        //     println!("{:?}", row);
-        // }
-        // constraint_system_to_linear_system(&vec![walk_result.constraints[0].clone()]);
-        // println!("====");
-        // println!("{:?}", walk_result.constraints[1]);
-        // constraint_system_to_linear_system(&vec![walk_result.constraints[1].clone()]);
+        let walk_result = walker::extract_types(&tu_result.unwrap(), &z3_solver);
+
         let (system, object_name_to_colums) =
             constraint_system_to_linear_system(&walk_result.constraints, cli_args.show_equations);
 
@@ -120,41 +115,39 @@ fn main() {
             eprintln!("Program not repairable.")
         }
 
-        // let a = DMatrix::from_fn(a.len(), a[0].len(), |i, j| a[i][j]);
-        // let b = DVector::from_iterator(b.len(), b);
-        // let results = lstsq::lstsq(&a, &b, 0.000000001).unwrap();
+        frames::add_minimization_constraint(&z3_solver, &walk_result.frame_repair_consts);
+        let frame_result = z3_solver.check(&[]);
+        if frame_result == z3::SatResult::Sat {
+            println!("Frames are satisfiable!");
+            let model = z3_solver.get_model().unwrap();
 
-        // if results.residuals.abs() > 0.01 {
-        //     println!("Not repairable.");
-        // } else {
-        //     println!("Repairable.");
-        //     generate_repair(results, &object_name_to_colums, &walk_result.tmp_terms_to_repair_contexts);
-        // }
+            for (frame_conversion_name, conversion) in
+                &walk_result.frame_conversion_name_to_conversion
+            {
+                let conversion = frames::Conversions::from(
+                    model
+                        .get_const_interp(&(*conversion.as_ref()))
+                        .unwrap()
+                        .as_i64()
+                        .unwrap(),
+                );
+                if conversion != frames::Conversions::NoOp {
+                    let repair_context = walk_result
+                        .frame_conversion_name_to_repair_context
+                        .get(frame_conversion_name);
+
+                    println!(
+                        "{}: {:?}({})",
+                        repair_context.unwrap().source_location,
+                        conversion,
+                        repair_context.unwrap().original_expression,
+                    )
+                }
+            }
+        } else {
+            eprintln!("Frames not satisfiable.");
+        }
     }
-}
-
-fn play_with_z3() {
-    let cfg = z3::Config::new();
-    let ctx = z3::Context::new(&cfg);
-    let x = z3::ast::Int::new_const(&ctx, "x");
-    let y = z3::ast::Int::new_const(&ctx, "y");
-
-    let solver = z3::Solver::new(&ctx);
-    let _42_const = z3::ast::Int::from_i64(&ctx, 42);
-    solver.assert(&z3::ast::Bool::and(
-        &ctx,
-        &[&y.le(&_42_const), &x.lt(&_42_const)],
-    ));
-
-    if solver.check() == z3::SatResult::Unsat {
-        eprintln!("Could not solve!");
-        std::process::exit(1);
-    }
-
-    let model = solver.get_model().unwrap();
-    let x_solution = model.get_const_interp(&x);
-    let y_solution = model.get_const_interp(&y);
-    println!("x = {}, y = {}", x_solution.unwrap(), y_solution.unwrap());
 }
 
 fn validate_command_line_args(args: &Cli) {

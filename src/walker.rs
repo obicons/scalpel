@@ -1,8 +1,6 @@
-use clang::EntityVisitResult;
-
 use crate::constraints::assert_literal;
 use crate::util::*;
-use crate::{constraints, types};
+use crate::{constraints, frames, types};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
@@ -11,22 +9,32 @@ pub struct RepairContext {
     pub original_expression: String,
 }
 
-pub struct WalkResult {
+pub struct WalkResult<'a> {
     context: Vec<String>,
     pub constraints: Vec<Rc<constraints::Constraint>>,
     object_name: Option<String>,
     fresh_count: i32,
     pub tmp_terms_to_repair_contexts: HashMap<constraints::Object, RepairContext>,
+
+    // Frame stuff.
+    z3_solver: &'a z3::Optimize<'a>,
+    pub object_name_to_frame_var: HashMap<String, Rc<z3::ast::Int<'a>>>,
+    pub frame_conversion_name_to_conversion: HashMap<String, Rc<z3::ast::Int<'a>>>,
+    pub frame_conversion_name_to_repair_context: HashMap<String, RepairContext>,
+    pub frame_repair_consts: Vec<Rc<z3::ast::Int<'a>>>,
 }
 
-pub fn extract_types(tu: &clang::TranslationUnit) -> WalkResult {
+pub fn extract_types<'a>(
+    tu: &clang::TranslationUnit,
+    solver: &'a z3::Optimize<'a>,
+) -> WalkResult<'a> {
     let root_entity = tu.get_entity();
-    let mut w = WalkResult::new();
+    let mut w = WalkResult::new(&solver);
     root_entity.visit_children(|n, p| w.analyze_entity(n, p));
     return w;
 }
 
-impl WalkResult {
+impl<'a> WalkResult<'a> {
     fn qualify_name(&self, name: &str) -> String {
         if self.context.len() > 0 {
             self.context.join("::") + "::" + name
@@ -58,10 +66,16 @@ impl WalkResult {
         if let Some(qname) = node.get_name().and_then(|n| Some(self.qualify_name(&n))) {
             if let Some(comment) = node.get_parsed_comment() {
                 let text = get_comment_text(&comment);
+                if let Some((_, iframe, tframe)) = frames::parse_human_frame(&text) {
+                    let z3_var = frames::frame_assert(&qname, (&iframe, &tframe), self.z3_solver);
+                    self.object_name_to_frame_var
+                        .insert(String::from(&qname), z3_var);
+                    //println!("I see {} {:?} {:?}", var_name, iframe, tframe);
+                }
                 if let Some((_, type_info)) = types::parse_type_comment(&text) {
                     let object = Rc::new(constraints::Object::new(&qname));
                     let constraint = constraints::type_to_constraint(&type_info, object);
-                    //println!("Added constraint {}", constraint);
+                    //println!("For object {} added constraint {}", qname, constraint);
                     self.constraints.push(constraint);
                 }
             }
@@ -82,13 +96,13 @@ impl WalkResult {
             node.visit_children(|n, p| self.analyze_entity(n, p));
             return clang::EntityVisitResult::Continue;
         } else {
-            println!(
-                "Visiting node {} of kind {:?}: is_def = {},  is_decl = {}",
-                get_entity_spelling(&node).unwrap_or(String::from("Unknown spelling")),
-                node.get_kind(),
-                node.is_definition(),
-                node.is_declaration()
-            );
+            // println!(
+            //     "Visiting node {} of kind {:?}: is_def = {},  is_decl = {}",
+            //     get_entity_spelling(&node).unwrap_or(String::from("Unknown spelling")),
+            //     node.get_kind(),
+            //     node.is_definition(),
+            //     node.is_declaration()
+            // );
 
             // Create constraints based on the RHS.
             if node.is_definition() && has_initialization(&node) {
@@ -111,6 +125,39 @@ impl WalkResult {
                         "Unknown object in {}",
                         spell_source_location(&node)
                     ));
+
+                println!(
+                    "Visiting lhs {} and rhs {} in assignment.",
+                    lhs_object,
+                    self.object_name.as_ref().unwrap()
+                );
+
+                let mut count = self.fresh_count;
+                let naming_fn = || {
+                    let name = format!("T{}", count);
+                    count += 1;
+                    return name;
+                };
+
+                let frame_repair_name = frames::on_frame_assignment(
+                    &lhs_object,
+                    self.object_name.as_ref().unwrap(),
+                    self.z3_solver,
+                    &mut self.object_name_to_frame_var,
+                    &mut self.frame_conversion_name_to_conversion,
+                    &mut self.frame_repair_consts,
+                    naming_fn,
+                );
+                self.fresh_count = count;
+                self.frame_conversion_name_to_repair_context.insert(
+                    frame_repair_name,
+                    RepairContext {
+                        source_location: spell_source_location(&node),
+                        original_expression: get_rhs(&node)
+                            .and_then(|entity| get_entity_spelling(&entity))
+                            .unwrap_or(String::from("Unknown spelling")),
+                    },
+                );
 
                 let lobj = Rc::new(constraints::Object::new(&lhs_object));
                 let repair_term = self.fresh_variable();
@@ -250,13 +297,18 @@ impl WalkResult {
         }
     }
 
-    fn new() -> WalkResult {
+    fn new(solver: &'a z3::Optimize<'a>) -> WalkResult<'a> {
         WalkResult {
             context: vec![],
             constraints: vec![],
             object_name: None,
             fresh_count: 0,
             tmp_terms_to_repair_contexts: HashMap::new(),
+            z3_solver: solver,
+            object_name_to_frame_var: HashMap::new(),
+            frame_conversion_name_to_conversion: HashMap::new(),
+            frame_conversion_name_to_repair_context: HashMap::new(),
+            frame_repair_consts: Vec::new(),
         }
     }
 }
