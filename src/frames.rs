@@ -249,6 +249,60 @@ where
                     &repair_const._eq(&z3::ast::Int::from_i64(solver.get_context(), 1)),
                 ],
             ),
+            &z3::ast::Bool::and(
+                solver.get_context(),
+                &[
+                    &conversion_const._eq(&z3::ast::Int::from_i64(
+                        solver.get_context(),
+                        Conversions::GlobalToLocal.into(),
+                    )),
+                    &lhs_z3_var._eq(&z3::ast::Int::from_i64(
+                        solver.get_context(),
+                        frame_number((&InertialFrames::Local, &TemporalFrames::Unconstrained)),
+                    )),
+                    &rhs_z3_var._eq(&z3::ast::Int::from_i64(
+                        solver.get_context(),
+                        frame_number((&InertialFrames::Global, &TemporalFrames::Unconstrained)),
+                    )),
+                    &repair_const._eq(&z3::ast::Int::from_i64(solver.get_context(), 1)),
+                ],
+            ),
+            &z3::ast::Bool::and(
+                solver.get_context(),
+                &[
+                    &conversion_const._eq(&z3::ast::Int::from_i64(
+                        solver.get_context(),
+                        Conversions::BootToEpoch.into(),
+                    )),
+                    &lhs_z3_var._eq(&z3::ast::Int::from_i64(
+                        solver.get_context(),
+                        frame_number((&InertialFrames::Unconstrained, &TemporalFrames::Epoch)),
+                    )),
+                    &rhs_z3_var._eq(&z3::ast::Int::from_i64(
+                        solver.get_context(),
+                        frame_number((&InertialFrames::Unconstrained, &TemporalFrames::Boot)),
+                    )),
+                    &repair_const._eq(&z3::ast::Int::from_i64(solver.get_context(), 1)),
+                ],
+            ),
+            &z3::ast::Bool::and(
+                solver.get_context(),
+                &[
+                    &conversion_const._eq(&z3::ast::Int::from_i64(
+                        solver.get_context(),
+                        Conversions::EpochToBoot.into(),
+                    )),
+                    &lhs_z3_var._eq(&z3::ast::Int::from_i64(
+                        solver.get_context(),
+                        frame_number((&InertialFrames::Unconstrained, &TemporalFrames::Boot)),
+                    )),
+                    &rhs_z3_var._eq(&z3::ast::Int::from_i64(
+                        solver.get_context(),
+                        frame_number((&InertialFrames::Unconstrained, &TemporalFrames::Epoch)),
+                    )),
+                    &repair_const._eq(&z3::ast::Int::from_i64(solver.get_context(), 1)),
+                ],
+            ),
             // TODO
         ],
     );

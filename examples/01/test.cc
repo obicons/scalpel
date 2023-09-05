@@ -23,10 +23,10 @@ namespace n1 {
 
 int main() {
     /// x: m
-    /// frame(x) = (global, _)
+    /// frame(x) = (_, epoch)
     double x;
 
     /// z: cm
-    /// frame(z) = (local, _)
+    /// frame(z) = (_, boot)
     double z = x;
 }

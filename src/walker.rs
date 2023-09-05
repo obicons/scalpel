@@ -70,7 +70,7 @@ impl<'a> WalkResult<'a> {
                     let z3_var = frames::frame_assert(&qname, (&iframe, &tframe), self.z3_solver);
                     self.object_name_to_frame_var
                         .insert(String::from(&qname), z3_var);
-                    //println!("I see {} {:?} {:?}", var_name, iframe, tframe);
+                    println!("I see {} {:?} {:?}", qname, iframe, tframe);
                 }
                 if let Some((_, type_info)) = types::parse_type_comment(&text) {
                     let object = Rc::new(constraints::Object::new(&qname));
